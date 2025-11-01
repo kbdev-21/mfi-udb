@@ -1,14 +1,12 @@
-package org.example.bruteforce;
-
-import org.example.data.Item;
+package org.example.data;
 
 import java.util.Set;
 
-public class BFItemset {
+public class Itemset {
     private final Set<Item> items;
     private Double expectedSupport;
 
-    public BFItemset(Set<Item> items) {
+    public Itemset(Set<Item> items) {
         this.items = items;
     }
 
@@ -31,7 +29,7 @@ public class BFItemset {
         }
         sb.deleteCharAt(sb.length() - 1);
         if(expectedSupport != null) {
-            sb.append(" (esup: ").append(expectedSupport).append(")");
+            sb.append(" (expected support: ").append(expectedSupport).append(")");
         }
         return sb.toString();
     }

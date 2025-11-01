@@ -1,9 +1,6 @@
 package org.example.bruteforce;
 
-import org.example.data.Item;
-import org.example.data.MiningData;
-import org.example.data.Transaction;
-import org.example.data.Unit;
+import org.example.data.*;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -17,40 +14,32 @@ public class BruteForceSolution {
         this.minEsupRate = minEsupRate;
     }
 
-    public void execute() {
+    public List<Itemset> maximalFrequentItemsets() {
         List<Item> items = miningData.getItems();
         List<Transaction> transactions = miningData.getTransactions();
 
-        double minEsup = minEsupRate * transactions.size();
+        double minExpectedSupport = minEsupRate * transactions.size();
 
-        System.out.println("========== All Itemsets ==========");
-        List<BFItemset> allBFItemsets = generateAllPossibleItemsets(items);
-        allBFItemsets.forEach(BFItemset -> {
+        List<Itemset> allItemsets = generateAllPossibleItemsets(items);
+        allItemsets.forEach(Itemset -> {
             double expectedSupport = 0;
             for(Transaction transaction : transactions) {
-                expectedSupport += calculateExistedProbabilityForItemset(BFItemset, transaction);
+                expectedSupport += calculateExistedProbabilityForItemset(Itemset, transaction);
             }
-            BFItemset.setExpectedSupport(expectedSupport);
-            System.out.println(BFItemset);
+            Itemset.setExpectedSupport(expectedSupport);
         });
 
-        List<BFItemset> frequentBFItemsets = allBFItemsets.stream()
-            .filter(i -> i.getExpectedSupport() > minEsup)
+        List<Itemset> frequentItemsets = allItemsets.stream()
+            .filter(i -> i.getExpectedSupport() > minExpectedSupport)
             .toList();
 
-        List<BFItemset> maximalFrequentBFItemsets = frequentBFItemsets.stream()
-            .filter(i -> isMaximalItemset(i, frequentBFItemsets))
+        return frequentItemsets.stream()
+            .filter(i -> isMaximalItemset(i, frequentItemsets))
             .toList();
-
-        System.out.println("========== Frequent Itemsets ==========");
-        frequentBFItemsets.forEach(System.out::println);
-
-        System.out.println("========== Maximal Frequent Itemsets ==========");
-        maximalFrequentBFItemsets.forEach(System.out::println);
     }
 
-    private List<BFItemset> generateAllPossibleItemsets(List<Item> items) {
-        final List<BFItemset> BFItemsets = new ArrayList<>();
+    private List<Itemset> generateAllPossibleItemsets(List<Item> items) {
+        final List<Itemset> Itemsets = new ArrayList<>();
         int n = items.size();
 
         int maxCombinations = 1 << n;
@@ -62,13 +51,13 @@ public class BruteForceSolution {
                     currentItems.add(items.get(j));
                 }
             }
-            BFItemsets.add(new BFItemset(currentItems));
+            Itemsets.add(new Itemset(currentItems));
         }
 
-        return BFItemsets;
+        return Itemsets;
     }
 
-    private double calculateExistedProbabilityForItemset(BFItemset BFItemset, Transaction transaction) {
+    private double calculateExistedProbabilityForItemset(Itemset Itemset, Transaction transaction) {
         Map<Item, Double> transactionItemProbabilities = transaction.getUnits().stream()
             .collect(Collectors.toMap(
                 Unit::getItem,
@@ -77,7 +66,7 @@ public class BruteForceSolution {
 
         double expectedSupport = 1.0;
 
-        for (Item item : BFItemset.getItems()) {
+        for (Item item : Itemset.getItems()) {
             if (transactionItemProbabilities.containsKey(item)) {
                 expectedSupport *= transactionItemProbabilities.get(item);
             } else {
@@ -88,14 +77,14 @@ public class BruteForceSolution {
         return expectedSupport;
     }
 
-    private boolean isMaximalItemset(BFItemset BFItemset, List<BFItemset> frequentBFItemsets) {
-        Set<Item> setX = new HashSet<>(BFItemset.getItems());
+    private boolean isMaximalItemset(Itemset Itemset, List<Itemset> frequentItemsets) {
+        Set<Item> setX = new HashSet<>(Itemset.getItems());
         int sizeX = setX.size();
 
-        for (BFItemset BFItemsetY : frequentBFItemsets) {
-            int sizeY = BFItemsetY.getItems().size();
+        for (Itemset ItemsetY : frequentItemsets) {
+            int sizeY = ItemsetY.getItems().size();
             if (sizeY > sizeX) {
-                Set<Item> setY = new HashSet<>(BFItemsetY.getItems());
+                Set<Item> setY = new HashSet<>(ItemsetY.getItems());
                 if (setY.containsAll(setX)) {
                     return false;
                 }
