@@ -1,6 +1,7 @@
 package org.example.data;
 
 import java.util.List;
+import java.util.*;
 
 public class MiningData {
     private final List<Item> items;
