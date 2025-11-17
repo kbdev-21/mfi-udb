@@ -64,7 +64,7 @@ public class UFPGrowthAlgorithm {
             System.out.println("NEW PATH:");
             UFPTreeNode current = root;
             for(Unit u: transaction.getUnits()) {
-                double roundedProbability = DiscretizationUtil.roundingWithBin(u.getProbability(), 10);
+                double roundedProbability = DiscretizationUtil.roundingWithBin(u.getProbability(), 20);
                 String key = u.getItem().getId() + ":" + roundedProbability;
                 if(current.getChildren().containsKey(key)) {
                     current = current.getChildren().get(key);
