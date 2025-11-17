@@ -33,9 +33,10 @@ public class BruteForceSolution {
             .filter(i -> i.getExpectedSupport() > minExpectedSupport)
             .toList();
 
-        return frequentItemsets.stream()
-            .filter(i -> isMaximalItemset(i, frequentItemsets))
-            .toList();
+//        return frequentItemsets.stream()
+//            .filter(i -> isMaximalItemset(i, frequentItemsets))
+//            .toList();
+        return frequentItemsets;
     }
 
     private List<Itemset> generateAllPossibleItemsets(List<Item> items) {
