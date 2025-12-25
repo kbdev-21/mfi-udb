@@ -4,19 +4,53 @@ import org.example.bruteforce.BruteForceSolution;
 import org.example.data.DataGenerator;
 import org.example.data.Itemset;
 import org.example.data.MiningData;
-
+import org.example.data.Transaction;
+import org.example.data.Item;
+import org.example.data.Unit;
 import java.util.List;
+import org.example.HashMaxUncertain.HashMaxUncertain;
 
 public class Main {
     public static void main(String[] args) {
-        int itemsCount = 10;
-        int transactionsCount = 1000;
-        double minExpectedSupportRate = 0.05;
+        // ví dụ tạo dữ liệu nhỏ
+        Item A = new Item("A");
+        Item B = new Item("B");
+        Item C = new Item("C");
+        Item D = new Item("D");
 
-        MiningData data = DataGenerator.generateRandomData(itemsCount, transactionsCount);
+        Transaction t1 = new Transaction(List.of(
+                new Unit(A, 0.9),
+                new Unit(B, 0.8),
+                new Unit(C, 0.7)
+        ));
 
-        BruteForceSolution bruteForce = new BruteForceSolution(data, minExpectedSupportRate);
-        List<Itemset> maximalFrequentItemsets = bruteForce.maximalFrequentItemsets();
-        maximalFrequentItemsets.forEach(System.out::println);
+// T2: A,B,C xuất hiện yếu hơn
+        Transaction t2 = new Transaction(List.of(
+                new Unit(A, 0.6),
+                new Unit(B, 0.6),
+                new Unit(C, 0.5)
+        ));
+
+// T3: B,C,D
+        Transaction t3 = new Transaction(List.of(
+                new Unit(B, 0.9),
+                new Unit(C, 0.8),
+                new Unit(D, 0.7)
+        ));
+
+        MiningData data = new MiningData(
+                List.of(A, B, C, D),
+                List.of(t1, t2, t3)
+        );
+
+        double minEsupRatio = 0.2;   // ví dụ 50%
+        int numBuckets = 97;
+
+        HashMaxUncertain miner = new HashMaxUncertain(data, minEsupRatio, numBuckets);
+        List<Itemset> maximal = miner.run();
+
+        for (Itemset is : maximal) {
+            System.out.println(is);
+        }
     }
 }
