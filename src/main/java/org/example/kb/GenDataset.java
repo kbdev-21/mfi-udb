@@ -6,7 +6,7 @@ import java.util.*;
 
 public class GenDataset {
     public static void main(String[] args) {
-        List<MTransaction> newDataset = GenDataset.generateRandomDataset(20, 1000);
+        List<MTransaction> newDataset = GenDataset.generateRandomDataset(15, 1000);
         //String filename = "dataset-" + UUID.randomUUID() + ".txt";
         String filename = "dataset-small.txt";
         GenDataset.writeToFile(newDataset, "data/" + filename);
