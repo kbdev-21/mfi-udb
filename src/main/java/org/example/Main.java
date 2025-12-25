@@ -24,14 +24,14 @@ public class Main {
                 new Unit(C, 0.7)
         ));
 
-// T2: A,B,C xuất hiện yếu hơn
+
         Transaction t2 = new Transaction(List.of(
                 new Unit(A, 0.6),
                 new Unit(B, 0.6),
                 new Unit(C, 0.5)
         ));
 
-// T3: B,C,D
+
         Transaction t3 = new Transaction(List.of(
                 new Unit(B, 0.9),
                 new Unit(C, 0.8),
