@@ -20,51 +20,21 @@ public class UFPGrowthAlgorithm {
         List<Transaction> transactions = miningData.getTransactions();
         double minExpectedSupport = minExpectedSupportRate * transactions.size();
 
-        Map<Item, Double> itemsEsupMap = new HashMap<>();
-        for (Transaction t : transactions) {
-            for (Unit u : t.getUnits()) {
-                itemsEsupMap.merge(u.getItem(), u.getProbability(), Double::sum);
-            }
-        }
+        Map<Item, Double> filteredAndSortedItemsEsupMap = calculateFilteredAndSortedItemsEsupMap(transactions, minExpectedSupport);
 
-        Map<Item, Double> filteredAndSortedItemsEsupMap = itemsEsupMap.entrySet()
-            .stream()
-            .filter(e -> e.getValue() >= minExpectedSupport)
-            .sorted((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()))
-            .collect(Collectors.toMap(
-                Map.Entry::getKey,
-                Map.Entry::getValue,
-                (a, b) -> a,
-                LinkedHashMap::new)
-            );
+        //filteredAndSortedItemsEsupMap.forEach((key, value) -> System.out.println(key.getId() + ": " + value));
 
-        filteredAndSortedItemsEsupMap.forEach((key, value) -> System.out.println(key.getId() + ": " + value));
-
-        transactions.forEach(transaction -> {
-            List<Unit> filteredAndSortedUnits = transaction.getUnits().stream()
-                .filter(u -> filteredAndSortedItemsEsupMap.containsKey(u.getItem()))
-                .sorted((u1, u2) -> {
-                    double es1 = filteredAndSortedItemsEsupMap.getOrDefault(u1.getItem(), 0.0);
-                    double es2 = filteredAndSortedItemsEsupMap.getOrDefault(u2.getItem(), 0.0);
-                    return Double.compare(es2, es1);
-                })
-                .collect(Collectors.toList());
-            transaction.setUnits(filteredAndSortedUnits);
-
-            System.out.println("TRANSACTION:");
-            transaction.getUnits().forEach(unit -> {
-                System.out.println(unit.getItem().getId() + ": " + unit.getProbability());
-            });
-        });
+        sortTransactionUnits(transactions, filteredAndSortedItemsEsupMap);
 
         Map<String, ItemNodeEntry> headerTable = new HashMap<>();
         UFPTreeNode root = new UFPTreeNode(null, 1.0,  null);
 
+        /* insert transactions to tree */
         transactions.forEach(transaction -> {
             System.out.println("NEW PATH:");
             UFPTreeNode current = root;
             for(Unit u: transaction.getUnits()) {
-                double roundedProbability = DiscretizationUtil.roundingWithBin(u.getProbability(), 20);
+                double roundedProbability = DiscretizationUtil.roundingWithBin(u.getProbability(), 4);
                 String key = u.getItem().getId() + ":" + roundedProbability;
                 if(current.getChildren().containsKey(key)) {
                     current = current.getChildren().get(key);
@@ -89,6 +59,7 @@ public class UFPGrowthAlgorithm {
             }
         });
 
+        /* mining frequent itemsets from tree */
         List<String> miningItemIds = filteredAndSortedItemsEsupMap.keySet().stream()
             .map(Item::getId)
             .toList()
@@ -109,38 +80,49 @@ public class UFPGrowthAlgorithm {
                 List<UFPTreeNode> path = new ArrayList<>();
 
                 while (node != null && node.getParent() != null) {
+
+                    // node hiện tại vừa được thêm vào path
                     path.add(node);
+
+                    // =========================================
+                    // 1) Tạo itemset 2 phần tử: {base, node mới}
+                    // =========================================
+                    Set<String> twoItemset = new HashSet<>();
+                    twoItemset.add(baseItemId);
+                    twoItemset.add(node.getItemId());
+
+                    double esupTwo = baseProbability * node.getProbability();
+                    itemsetsEsup.merge(twoItemset, esupTwo, Double::sum);
+
+                    // Di chuyển lên parent
                     node = node.getParent();
 
+                    // =========================================
+                    // 2) Tạo itemset lớn hơn từ cả path
+                    // =========================================
                     Set<String> itemsetIds = new HashSet<>();
                     itemsetIds.add(baseItemId);
+
                     double esup = baseProbability;
-                    for(UFPTreeNode n: path) {
-                        if(n.getItemId().equals(baseItemId)) {
-                            continue;
+                    for (UFPTreeNode n : path) {
+                        if (!n.getItemId().equals(baseItemId)) {
+                            itemsetIds.add(n.getItemId());
+                            esup *= n.getProbability();
                         }
-                        itemsetIds.add(n.getItemId());
-                        esup *= n.getProbability();
                     }
-                    itemsetsEsup.merge(itemsetIds, esup, Double::sum);
-                }
 
-                if(path.size() <= 1) {
-                    if(currentTail.getNeighbor() != null) {
-                        currentTail = currentTail.getNeighbor();
-                        continue;
-                    }
-                    else {
-                        break;
+                    // =========================================
+                    // 3) Tránh trùng với twoItemset
+                    // =========================================
+                    if (!itemsetIds.equals(twoItemset)) {
+                        itemsetsEsup.merge(itemsetIds, esup, Double::sum);
                     }
                 }
 
-                if(currentTail.getNeighbor() != null) {
-                    currentTail = currentTail.getNeighbor();
-                }
-                else {
+                if (currentTail.getNeighbor() == null) {
                     break;
                 }
+                currentTail = currentTail.getNeighbor();
             }
 
             List<Itemset> generatedFrequentItemsets = itemsetsEsup.entrySet().stream()
@@ -156,8 +138,45 @@ public class UFPGrowthAlgorithm {
             frequentItemsets.addAll(generatedFrequentItemsets);
         }
 
-        frequentItemsets.forEach(System.out::println);
+        return frequentItemsets;
+    }
 
-        return null;
+    private Map<Item, Double> calculateFilteredAndSortedItemsEsupMap(List<Transaction> transactions, double minExpectedSupport) {
+        Map<Item, Double> itemsEsupMap = new HashMap<>();
+        for (Transaction t : transactions) {
+            for (Unit u : t.getUnits()) {
+                itemsEsupMap.merge(u.getItem(), u.getProbability(), Double::sum);
+            }
+        }
+
+        return itemsEsupMap.entrySet()
+            .stream()
+            .filter(e -> e.getValue() >= minExpectedSupport)
+            .sorted((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()))
+            .collect(Collectors.toMap(
+                Map.Entry::getKey,
+                Map.Entry::getValue,
+                (a, b) -> a,
+                LinkedHashMap::new)
+            );
+    }
+
+    private void sortTransactionUnits(List<Transaction> transactions, Map<Item, Double> filteredAndSortedItemsEsupMap) {
+        transactions.forEach(transaction -> {
+            List<Unit> filteredAndSortedUnits = transaction.getUnits().stream()
+                .filter(u -> filteredAndSortedItemsEsupMap.containsKey(u.getItem()))
+                .sorted((u1, u2) -> {
+                    double es1 = filteredAndSortedItemsEsupMap.getOrDefault(u1.getItem(), 0.0);
+                    double es2 = filteredAndSortedItemsEsupMap.getOrDefault(u2.getItem(), 0.0);
+                    return Double.compare(es2, es1);
+                })
+                .collect(Collectors.toList());
+            transaction.setUnits(filteredAndSortedUnits);
+
+//            System.out.println("TRANSACTION:");
+//            transaction.getUnits().forEach(unit -> {
+//                System.out.println(unit.getItem().getId() + ": " + unit.getProbability());
+//            });
+        });
     }
 }

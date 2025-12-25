@@ -45,7 +45,7 @@ public class TestUFPGrowth {
         int transactionsCount = 10000;
         double minExpectedSupportRate = 0.05;
         var data = DataGenerator.generateRandomData(itemsCount, transactionsCount);
-//        var data = new MiningData(List.of(a,b,c,d), List.of(t1,t2,t3,t4));
+        //var data = new MiningData(List.of(a,b,c,d), List.of(t1,t2,t3,t4));
 
 //        var bf = new BruteForceSolution(
 //            data,
@@ -59,7 +59,8 @@ public class TestUFPGrowth {
             minExpectedSupportRate
         );
 
-        ufp.maximalFrequentItemsets();
+        var ufpResult = ufp.maximalFrequentItemsets();
+        ufpResult.forEach(i -> System.out.println(i.toString()));
     }
 
 

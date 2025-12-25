@@ -14,19 +14,10 @@ public class DataGenerator {
     private static List<Item> generateRandomItems(int count) {
         List<Item> allItems = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            String itemName = generateItemName(i, count);
+            String itemName = "I" + (i + 1);
             allItems.add(new Item(itemName));
         }
         return allItems;
-    }
-
-    private static String generateItemName(int index, int totalCount) {
-        int paddingLength = (int) Math.ceil(Math.log10(totalCount + 1));
-        if (paddingLength < 1) {
-            paddingLength = 1;
-        }
-        String formatSpecifier = String.format("I%%0%dd", paddingLength);
-        return String.format(formatSpecifier, index + 1);
     }
 
     private static List<Transaction> generateRandomTransactions(List<Item> allItems, int count, int minItems, int maxItems) {

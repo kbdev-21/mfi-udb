@@ -5,14 +5,15 @@ import org.example.data.*;
 import org.example.uapriori.UAprioriAlgorithm;
 import org.example.ufpgrowth.UFPGrowthAlgorithm;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
 public class Main {
     public static void main(String[] args) {
-        int itemsCount = 10;
-        int transactionsCount = 1000;
-        double minExpectedSupportRate = 0.1;
+        int itemsCount = 100;
+        int transactionsCount = 50000;
+        double minExpectedSupportRate = 0.05;
 
         Item a = new Item("A");
         Item b = new Item("B");
@@ -43,25 +44,29 @@ public class Main {
         MiningData data = DataGenerator.generateRandomData(itemsCount, transactionsCount);
 //        MiningData data = new MiningData(List.of(a, b, c, d), List.of(t1, t2, t3, t4));
 
-        var bf = new BruteForceSolution(
-            data,
-            minExpectedSupportRate
-        );
-        var bfResult = bf.maximalFrequentItemsets();
-        bfResult.forEach(i -> System.out.println(i.toString()));
+//        var bf = new BruteForceSolution(
+//            data,
+//            minExpectedSupportRate
+//        );
+//        var bfResult = bf.maximalFrequentItemsets();
+//        bfResult.forEach(i -> System.out.println(i.toString()));
 
-        System.out.println("apriori");
-        UAprioriAlgorithm apriori = new UAprioriAlgorithm(data, minExpectedSupportRate);
-        var aprioriResult = apriori.findFrequentItemsets();
-        aprioriResult.forEach(i -> System.out.println(i.toString()));
+//        System.out.println("apriori");
+//        System.out.println(Instant.now());
+//        UAprioriAlgorithm apriori = new UAprioriAlgorithm(data, minExpectedSupportRate);
+//        var aprioriResult = apriori.findFrequentItemsets();
+//        aprioriResult.forEach(i -> System.out.println(i.toString()));
+
 
         System.out.println("fp");
+        System.out.println(Instant.now());
         var fp = new UFPGrowthAlgorithm(
             data,
             minExpectedSupportRate
         );
         var fpResult = fp.maximalFrequentItemsets();
-
+        fpResult.forEach(i -> System.out.println(i.toString()));
+        System.out.println(Instant.now());
 
     }
 }
