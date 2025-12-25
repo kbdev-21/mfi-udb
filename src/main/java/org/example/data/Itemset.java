@@ -10,6 +10,11 @@ public class Itemset {
         this.items = items;
     }
 
+    public Itemset(Set<Item> items, Double expectedSupport) {
+        this.items = items;
+        this.expectedSupport = expectedSupport;
+    }
+
     public Set<Item> getItems() {
         return items;
     }
