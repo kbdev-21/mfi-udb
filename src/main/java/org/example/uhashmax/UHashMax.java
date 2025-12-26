@@ -15,16 +15,20 @@ import org.example.data.Itemset;
  *   (minEsupThreshold = minEsupRatio * số giao dịch)
  * - maximal: không tồn tại superset frequent nào của X
  */
+
+
 public class UHashMax {
 
+    private final int maxK;
     private final MiningData data;
     private final double minEsupRatio;      // ví dụ 0.3 = 30%
     private final int numBuckets;           // số bucket cho hashing
 
-    public UHashMax(MiningData data, double minEsupRatio, int numBuckets) {
+    public UHashMax(MiningData data, double minEsupRatio, int numBuckets,int maxK) {
         this.data = data;
         this.minEsupRatio = minEsupRatio;
         this.numBuckets = numBuckets;
+        this.maxK = maxK;
     }
 
     public List<Itemset> run() {
@@ -60,7 +64,8 @@ public class UHashMax {
         List<Itemset> maximalItemsets = new ArrayList<>();
 
         // 3. Top-down: từ độ dài maxLen xuống 2
-        for (int k = maxLen; k >= 2; k--) {
+        int upperK=Math.min(maxLen,maxK);
+        for (int k = upperK; k >= 2; k--) {
             // mỗi bucket: Map<Set<Item>, Double expectedSupport>
             List<Map<Set<Item>, Double>> buckets = new ArrayList<>(numBuckets);
             for (int i = 0; i < numBuckets; i++) {
