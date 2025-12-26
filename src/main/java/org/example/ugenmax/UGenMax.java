@@ -1,4 +1,4 @@
-package org.example.kb;
+package org.example.ugenmax;
 
 import java.util.*;
 
@@ -6,10 +6,10 @@ public class UGenMax {
     private final List<MTransaction> dataset;
     private final double minEsup;
 
-    private List<MItemset> maximalItemsets = new ArrayList<>();
+    private final List<MItemset> maximalItemsets = new ArrayList<>();
+    private final Map<String, UGenMaxNode> singleItemNodes = new HashMap<>();
     private int nodeCount = 0;
     private int prunedCount = 0;
-    private Map<String, UGenMaxNode> singleItemNodes = new HashMap<>();
 
     public UGenMax(List<MTransaction> dataset, double minEsup) {
         this.dataset = dataset;

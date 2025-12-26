@@ -1,4 +1,4 @@
-package org.example.kb;
+package org.example.ugenmax;
 
 import java.util.Set;
 

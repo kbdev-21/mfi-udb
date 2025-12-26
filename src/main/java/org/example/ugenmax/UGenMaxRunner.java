@@ -1,13 +1,15 @@
-package org.example.kb;
+package org.example.ugenmax;
+
+import org.example.data.DatasetGenerator;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
-public class TestKb {
+public class UGenMaxRunner {
     public static void main(String[] args) {
         Instant start = Instant.now();
-        List<MTransaction> dataset = GenDataset.readFromFile("data/dataset-small.txt");
+        List<MTransaction> dataset = DatasetGenerator.readFromFile("datasets/dataset-small.txt");
         double minEsup = dataset.size() * 0.2;
         UGenMax alg = new UGenMax(dataset, minEsup);
         List<MItemset> itemsets = alg.mfi();

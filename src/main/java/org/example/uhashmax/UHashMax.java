@@ -1,4 +1,4 @@
-package org.example.HashMaxUncertain;
+package org.example.uhashmax;
 
 import java.util.*;
 import org.example.data.MiningData;
@@ -15,13 +15,13 @@ import org.example.data.Itemset;
  *   (minEsupThreshold = minEsupRatio * số giao dịch)
  * - maximal: không tồn tại superset frequent nào của X
  */
-public class HashMaxUncertain {
+public class UHashMax {
 
     private final MiningData data;
     private final double minEsupRatio;      // ví dụ 0.3 = 30%
     private final int numBuckets;           // số bucket cho hashing
 
-    public HashMaxUncertain(MiningData data, double minEsupRatio, int numBuckets) {
+    public UHashMax(MiningData data, double minEsupRatio, int numBuckets) {
         this.data = data;
         this.minEsupRatio = minEsupRatio;
         this.numBuckets = numBuckets;
