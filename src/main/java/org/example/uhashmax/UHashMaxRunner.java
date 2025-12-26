@@ -2,7 +2,7 @@ package org.example.uhashmax;
 
 import org.example.data.Mapper;
 import org.example.data.*;
-import org.example.ugenmax.MTransaction;
+import org.example.data.MTransaction;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -34,8 +34,9 @@ public class UHashMaxRunner {
 
         double minEsupRatio = 0.2;
         int numBuckets = 200; //97
+        int maxK =3;
 
-        UHashMax miner = new UHashMax(data, minEsupRatio, numBuckets);
+        UHashMax miner = new UHashMax(data, minEsupRatio, numBuckets,maxK);
         List<Itemset> maximal = miner.run();
 
         for (Itemset is : maximal) {

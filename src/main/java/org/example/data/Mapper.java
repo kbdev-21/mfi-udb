@@ -1,7 +1,5 @@
 package org.example.data;
 
-import org.example.ugenmax.MTransaction;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;

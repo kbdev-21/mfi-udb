@@ -1,7 +1,5 @@
 package org.example.data;
 
-import org.example.ugenmax.MTransaction;
-
 import java.io.*;
 import java.util.*;
 

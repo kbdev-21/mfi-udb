@@ -1,5 +1,8 @@
 package org.example.ugenmax;
 
+import org.example.data.MItemset;
+import org.example.data.MTransaction;
+
 import java.util.*;
 
 public class UGenMax {
