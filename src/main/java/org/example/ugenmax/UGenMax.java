@@ -35,36 +35,25 @@ public class UGenMax {
             .sorted(Comparator.comparingDouble(UGenMaxNode::getEsup))
             .toList();
 
-        for(int i = 0; i < firstCandidates.size(); i++) {
-            UGenMaxNode firstCurrent = firstCandidates.get(i);
-            backtrack(firstCurrent, firstCandidates.subList(i + 1, firstCandidates.size()));
-        }
+        backtrack(new UGenMaxNode(Set.of(""), new HashMap<>()), firstCandidates);
 
         maximalItemsets.forEach(itemset -> {System.out.println(itemset.getItems() + " - " + itemset.getExSup());});
         System.out.println("Found: " + maximalItemsets.size() + " itemsets");
         System.out.println("Node count: " + nodeCount);
         System.out.println("Pruned count: " + prunedCount);
 
-        return null;
+        return maximalItemsets;
     }
 
     private void backtrack(UGenMaxNode current, List<UGenMaxNode> candidates) {
         System.out.println("Current: " + current.getItemset());
-//        System.out.println("Candidates: " + candidates.size() + " (" + candidates.getFirst().getItemset() + ")");
+        //System.out.println("Candidates: " + candidates.size() + " (" + candidates.getFirst().getItemset() + ")");
         nodeCount++;
 
-        // pruning part
-        Set<String> maximalPossible = new HashSet<>(current.getItemset());
-        for(UGenMaxNode candidate : candidates) {
-            maximalPossible.addAll(candidate.getItemset());
-        }
-        //System.out.println("Maximal possible: " + maximalPossible);
-        for(MItemset i : maximalItemsets) {
-            if(i.getItems().containsAll(maximalPossible)) {
-                System.out.println("Pruning");
-                prunedCount++;
-                return;
-            }
+        if(isNodePrunable(current, candidates)) {
+            System.out.println("Pruning");
+            prunedCount++;
+            return;
         }
 
         List<UGenMaxNode> newCandidates = generateNewCandidates(current, candidates);
@@ -89,7 +78,26 @@ public class UGenMax {
         }
     }
 
+    private boolean isNodePrunable(UGenMaxNode current, List<UGenMaxNode> candidates) {
+        Set<String> maximalPossible = new HashSet<>(current.getItemset());
+        for(UGenMaxNode candidate : candidates) {
+            maximalPossible.addAll(candidate.getItemset());
+        }
+        //System.out.println("Maximal possible: " + maximalPossible);
+        for(MItemset i : maximalItemsets) {
+            if(i.getItems().containsAll(maximalPossible)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private List<UGenMaxNode> generateNewCandidates(UGenMaxNode current, List<UGenMaxNode> candidates) {
+        if(current.getItemset().equals(Set.of(""))) {
+            return new ArrayList<>(candidates);
+        }
+
         List<UGenMaxNode> newCandidates = new ArrayList<>();
         for(UGenMaxNode candidate : candidates) {
             if(candidate.getItemset().equals(current.getItemset())) {

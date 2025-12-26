@@ -13,7 +13,7 @@ import java.util.Set;
 public class UHashMaxRunner {
     private static final Mapper mapper = new Mapper();
     public static void main(String[] args) {
-        List<MTransaction> genDataset = DatasetGenerator.readFromFile("datasets/dataset-extrasmall2.txt");
+        List<MTransaction> genDataset = DatasetGenerator.readFromFile("datasets/dataset-small1.txt");
         List<Transaction> transactions = mapper.mapFrom(genDataset);
 
         Set<String> itemIds = new HashSet<>();
