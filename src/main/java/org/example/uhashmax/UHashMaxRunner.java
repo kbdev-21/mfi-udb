@@ -13,7 +13,7 @@ import java.util.Set;
 public class UHashMaxRunner {
     private static final Mapper mapper = new Mapper();
     public static void main(String[] args) {
-        List<MTransaction> genDataset = DatasetGenerator.readFromFile("datasets/dataset-medium.txt");
+        List<MTransaction> genDataset = DatasetGenerator.readFromFile("datasets/dataset-small.txt");
         List<Transaction> transactions = mapper.mapFrom(genDataset);
 
         Set<String> itemIds = new HashSet<>();
@@ -33,7 +33,7 @@ public class UHashMaxRunner {
         Instant start = Instant.now();
 
         double minEsupRatio = 0.2;
-        int numBuckets = 200; //97
+        int numBuckets = 5003; //97
         int maxK =3;
 
         UHashMax miner = new UHashMax(data, minEsupRatio, numBuckets,maxK);
