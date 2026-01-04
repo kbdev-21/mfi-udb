@@ -7,9 +7,9 @@ import java.util.*;
 
 public class DatasetGenerator {
     public static void main(String[] args) {
-        List<MTransaction> newDataset = DatasetGenerator.generateRandomDataset(50, 10000);
+        List<MTransaction> newDataset = DatasetGenerator.generateRandomDataset(20, 10000);
         //String filename = "dataset-" + UUID.randomUUID() + ".txt";
-        String filename = "dataset-medium.txt";
+        String filename = "dataset-small.txt";
         DatasetGenerator.writeToFile(newDataset, "datasets/" + filename);
     }
 
