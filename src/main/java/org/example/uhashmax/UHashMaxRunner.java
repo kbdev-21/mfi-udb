@@ -1,8 +1,8 @@
 package org.example.uhashmax;
 
+import org.example.data.MTransaction;
 import org.example.data.Mapper;
 import org.example.data.*;
-import org.example.ugenmax.MTransaction;
 
 import java.time.Duration;
 import java.time.Instant;
