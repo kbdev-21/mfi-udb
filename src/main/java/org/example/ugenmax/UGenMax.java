@@ -20,18 +20,7 @@ public class UGenMax {
     }
 
     public List<MItemset> mfi() {
-        for(MTransaction t : dataset) {
-            t.getUnits().entrySet().stream().toList().forEach(e -> {
-                if(!singleItemNodes.containsKey(e.getKey())) {
-                    UGenMaxNode newNode = new UGenMaxNode(Set.of(e.getKey()), new HashMap<>());
-                    newNode.addTidProb(t.getId(), e.getValue());
-                    singleItemNodes.put(e.getKey(), newNode);
-                }
-                else {
-                    singleItemNodes.get(e.getKey()).addTidProb(t.getId(), e.getValue());
-                }
-            });
-        }
+        setUpSingleItemNodes();
 
         List<UGenMaxNode> firstCandidates = singleItemNodes.values().stream()
             .filter(n -> n.getEsup() >= minEsup)
@@ -48,9 +37,23 @@ public class UGenMax {
         return maximalItemsets;
     }
 
+    private void setUpSingleItemNodes() {
+        for(MTransaction t : dataset) {
+            t.getUnits().entrySet().stream().toList().forEach(e -> {
+                if(!singleItemNodes.containsKey(e.getKey())) {
+                    UGenMaxNode newNode = new UGenMaxNode(Set.of(e.getKey()), new HashMap<>());
+                    newNode.addTidProb(t.getId(), e.getValue());
+                    singleItemNodes.put(e.getKey(), newNode);
+                }
+                else {
+                    singleItemNodes.get(e.getKey()).addTidProb(t.getId(), e.getValue());
+                }
+            });
+        }
+    }
+
     private void backtrack(UGenMaxNode current, List<UGenMaxNode> candidates) {
-        System.out.println("Current: " + current.getItemset());
-        //System.out.println("Candidates: " + candidates.size() + " (" + candidates.getFirst().getItemset() + ")");
+        System.out.println("Current node: " + current.getItemset());
         nodeCount++;
 
         if(isNodePrunable(current, candidates)) {
@@ -107,26 +110,30 @@ public class UGenMax {
                 continue;
             }
 
-            Set<String> combinedItemset = new HashSet<>(candidate.getItemset());
-            combinedItemset.addAll(current.getItemset());
-
-            Set<String> addedItemAsSet = new HashSet<>(combinedItemset);
-            addedItemAsSet.removeAll(current.getItemset());
-            String addedItem = addedItemAsSet.iterator().next();
-            Map<String, Double> addedItemTidProd = singleItemNodes.get(addedItem).getTidProb();
-
-            Map<String, Double> combinedTidProb = new HashMap<>();
-            current.getTidProb().forEach((tid, prob) -> {
-                if(addedItemTidProd.containsKey(tid)) {
-                    combinedTidProb.put(tid, prob * addedItemTidProd.get(tid));
-                }
-            });
-
-            UGenMaxNode newCandidate = new UGenMaxNode(combinedItemset, combinedTidProb);
+            UGenMaxNode newCandidate = combineForNewCandidate(current, candidate);
             if(newCandidate.getEsup() >= minEsup) {
                 newCandidates.add(newCandidate);
             }
         }
         return newCandidates;
+    }
+
+    private UGenMaxNode combineForNewCandidate(UGenMaxNode current, UGenMaxNode candidate) {
+        Set<String> combinedItemset = new HashSet<>(candidate.getItemset());
+        combinedItemset.addAll(current.getItemset());
+
+        Set<String> addedItemAsSet = new HashSet<>(combinedItemset);
+        addedItemAsSet.removeAll(current.getItemset());
+        String addedItem = addedItemAsSet.iterator().next();
+        Map<String, Double> addedItemTidProd = singleItemNodes.get(addedItem).getTidProb();
+
+        Map<String, Double> combinedTidProb = new HashMap<>();
+        current.getTidProb().forEach((tid, prob) -> {
+            if(addedItemTidProd.containsKey(tid)) {
+                combinedTidProb.put(tid, prob * addedItemTidProd.get(tid));
+            }
+        });
+
+        return new UGenMaxNode(combinedItemset, combinedTidProb);
     }
 }

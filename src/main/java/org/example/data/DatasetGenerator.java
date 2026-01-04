@@ -5,9 +5,10 @@ import java.util.*;
 
 public class DatasetGenerator {
     public static void main(String[] args) {
-        List<MTransaction> newDataset = DatasetGenerator.generateRandomDataset(100, 50000);
+        //List<MTransaction> newDataset = DatasetGenerator.generateRandomDataset(75, 3000);
+        List<MTransaction> newDataset = DatasetGenerator.translateFromSpmf("datasets/spmf/chess.txt");
         //String filename = "dataset-" + UUID.randomUUID() + ".txt";
-        String filename = "dataset-large.txt";
+        String filename = "dataset-chess.txt";
         DatasetGenerator.writeToFile(newDataset, "datasets/" + filename);
     }
 
@@ -31,8 +32,8 @@ public class DatasetGenerator {
         for (int t = 1; t <= numOfTransactions; t++) {
             LinkedHashMap<String, Double> units = new LinkedHashMap<>();
 
-            int itemsInTransaction = 1 + random.nextInt(numOfItems);
-            //int itemsInTransaction = numOfItems / 2 + random.nextInt(numOfItems - numOfItems / 2 + 1);
+            //int itemsInTransaction = 1 + random.nextInt(numOfItems);
+            int itemsInTransaction = numOfItems / 2 + random.nextInt(numOfItems - numOfItems / 2 + 1);
             Collections.shuffle(items, random);
 
             for (int i = 0; i < itemsInTransaction; i++) {
@@ -120,6 +121,44 @@ public class DatasetGenerator {
 
         } catch (IOException e) {
             throw new RuntimeException("Error reading dataset file", e);
+        }
+
+        return dataset;
+    }
+
+    public static List<MTransaction> translateFromSpmf(
+        String spmfFilePath
+    ) {
+        List<MTransaction> dataset = new ArrayList<>();
+        Random random = new Random();
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(spmfFilePath))) {
+            String line;
+            int tid = 1;
+
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+
+                String[] tokens = line.split("\\s+");
+                LinkedHashMap<String, Double> units = new LinkedHashMap<>();
+
+                for (String token : tokens) {
+                    // GIỮ NGUYÊN item ID
+                    String item = token;
+
+                    double prob = 0.8 + random.nextDouble() * 0.2;
+                    prob = Math.round(prob * 100.0) / 100.0;
+
+                    units.put(item, prob);
+                }
+
+                dataset.add(new MTransaction("T" + tid, units));
+                tid++;
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException("Error reading SPMF file", e);
         }
 
         return dataset;
