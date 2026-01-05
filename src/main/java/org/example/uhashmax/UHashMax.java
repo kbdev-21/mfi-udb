@@ -1,348 +1,471 @@
 package org.example.uhashmax;
 
+import org.example.data.MItemset;
+import org.example.data.MTransaction;
+
 import java.util.*;
-import org.example.data.MiningData;
-import org.example.data.Transaction;
-import org.example.data.Unit;
-import org.example.data.Item;
-import org.example.data.Itemset;
 
 /**
- * UHashMax optimized for 10000+ transactions with combination limit
+ * HashMax-style mining of MAXIMAL frequent itemsets on UNCERTAIN DB using EXPECTED SUPPORT.
+ *
+ * Expected Support:
+ *   ES(X) = sum_{T in DB} prod_{i in X} p(i, T)
+ *
+ * Frequent(X) iff ES(X) >= minEsup (absolute threshold, same as your GenMax call):
+ *   minEsup = dataset.size() * 0.3
+ *
+ * Key points:
+ * - Bucket identical transactions to reduce duplicates.
+ * - Prune F1 (singletons) first.
+ * - Build frequent pairs AFTER pruning F1 for Clean().
+ * - sources(X) computed exactly by intersection of bucketsContainingItem[item].
+ * - Post-filter maximal to guarantee "maximal" correctness.
  */
-public class UHashMax {
+public final class UHashMax {
 
-    private final int maxK;
-    private final MiningData data;
-    private final double minEsupRatio;
-    private final int numBuckets;
-    private Map<Item, Integer> itemToIndex;
-    private static final int MAX_COMBINATIONS_PER_TX = 12000; // Giới hạn combinations
+    private UHashMax() {}
 
-    public UHashMax(MiningData data, double minEsupRatio, int numBuckets, int maxK) {
-        this.data = data;
-        this.minEsupRatio = minEsupRatio;
-        this.numBuckets = numBuckets;
-        this.maxK = maxK;
+    /** Main API: identical to GenMax threshold style (absolute minEsup). */
+    public static List<MItemset> mfi(List<MTransaction> dataset, double minEsup) {
+        return mfi(dataset, minEsup, 1e-9);
     }
 
-    /*/
-    aaaa
-     */
-    public List<Itemset> run() {
-        long startTime = System.currentTimeMillis();
-        List<Transaction> transactions = data.getTransactions();
-        int n = transactions.size();
-        double minEsupThreshold = n * minEsupRatio;
+    public static List<MItemset> mfi(List<MTransaction> dataset, double minEsup, double eps) {
+        if (dataset == null || dataset.isEmpty()) return List.of();
 
-        System.out.println("Starting UHashMax with " + n + " transactions, minSup=" + minEsupRatio);
+        // 1) Collect all item IDs (stable order)
+        TreeSet<String> itemSet = new TreeSet<>();
+        for (MTransaction t : dataset) {
+            if (t == null || t.getUnits() == null) continue;
+            itemSet.addAll(t.getUnits().keySet());
+        }
+        if (itemSet.isEmpty()) return List.of();
 
-        // 1. Tính expected support cho từng item đơn (F1)
+        List<String> idxToItem = new ArrayList<>(itemSet);
+        int nItems = idxToItem.size();
+        Map<String, Integer> itemToIdx = new HashMap<>(nItems * 2);
+        for (int i = 0; i < nItems; i++) itemToIdx.put(idxToItem.get(i), i);
 
-        Map<Item, Double> f1 = buildF1(transactions);
+        // 2) Build buckets + F1 expected support in one pass over dataset
+        double[] f1ES = new double[nItems];
 
-        Map<Item, Double> frequentItems = new HashMap<>();
-        for (Map.Entry<Item, Double> e : f1.entrySet()) {
-            if (e.getValue() >= minEsupThreshold) {
-                frequentItems.put(e.getKey(), e.getValue());
+        Map<TxKey, Bucket> bucketMap = new HashMap<>();
+        List<Bucket> buckets = new ArrayList<>();
+
+        for (MTransaction t : dataset) {
+            if (t == null || t.getUnits() == null || t.getUnits().isEmpty()) continue;
+
+            // Convert transaction units into sorted index arrays
+            int m = t.getUnits().size();
+            int[] idxs = new int[m];
+            double[] probs = new double[m];
+
+            int k = 0;
+            for (Map.Entry<String, Double> e : t.getUnits().entrySet()) {
+                Integer idx = itemToIdx.get(e.getKey());
+                if (idx == null) continue;
+                double p = clamp01(e.getValue());
+                idxs[k] = idx;
+                probs[k] = p;
+                k++;
+            }
+            if (k == 0) continue;
+
+            if (k < m) {
+                idxs = Arrays.copyOf(idxs, k);
+                probs = Arrays.copyOf(probs, k);
+            }
+
+            // Sort by idx (and permute probs accordingly)
+            sortByIdx(idxs, probs);
+
+            // Update F1 ES
+            for (int i = 0; i < idxs.length; i++) {
+                f1ES[idxs[i]] += probs[i];
+            }
+
+            // Bucket by exact signature (items + prob bits)
+            TxKey key = new TxKey(idxs, probs);
+            Bucket b = bucketMap.get(key);
+            if (b == null) {
+                double[] probByItem = new double[nItems];
+                for (int i = 0; i < idxs.length; i++) probByItem[idxs[i]] = probs[i];
+                b = new Bucket(buckets.size(), idxs, probByItem);
+                bucketMap.put(key, b);
+                buckets.add(b);
+            } else {
+                b.count++;
             }
         }
-        if (frequentItems.isEmpty()) {
-            return Collections.emptyList();
+
+        if (buckets.isEmpty()) return List.of();
+
+        // 3) Prune F1
+        boolean[] inF1 = new boolean[nItems];
+        for (int i = 0; i < nItems; i++) {
+            inF1[i] = (f1ES[i] + eps) >= minEsup;
         }
 
-        System.out.println("Frequent 1-items: " + frequentItems.size());
-        buildItemIndex(frequentItems);
+        // 4) Build bucketsContainingItem and pruned items per bucket
+        BitSet[] bucketsContainingItem = new BitSet[nItems];
+        for (int i = 0; i < nItems; i++) bucketsContainingItem[i] = new BitSet(buckets.size());
 
-        // 2. Prune transactions
-        // Xóa items không frequent và sort giảm dần theo độ dài
-        List<List<Unit>> prunedTransactions = pruneTransactions(transactions, frequentItems.keySet());
-        prunedTransactions.sort((a, b) -> Integer.compare(b.size(), a.size()));
-
-        int maxLen = prunedTransactions.isEmpty() ? 0 : prunedTransactions.get(0).size();
-        if (maxLen == 0) {
-            return Collections.emptyList();
+        int[][] prunedItemsPerBucket = new int[buckets.size()][];
+        for (Bucket b : buckets) {
+            int[] pruned = filterByF1(b.items, inF1);
+            prunedItemsPerBucket[b.id] = pruned;
+            for (int it : pruned) bucketsContainingItem[it].set(b.id);
         }
 
-        System.out.println("Max transaction length: " + maxLen);
+        // 5) Compute pair ES only after pruning F1 (much faster), then frequentPairs for Clean()
+        Map<Long, Double> pairES = new HashMap<>();
+        for (Bucket b : buckets) {
+            int[] pruned = prunedItemsPerBucket[b.id];
+            if (pruned.length < 2) continue;
 
-        List<Itemset> maximalItemsets = new ArrayList<>();
+            for (int i = 0; i < pruned.length; i++) {
+                int a = pruned[i];
+                double pa = b.probByItem[a];
+                if (pa <= 0) continue;
 
-        // 3. Top-down mining
-        //Set upperK để mining từ dài nhất đến 2
-        int upperK = Math.min(maxLen, maxK);
-        for (int k = upperK; k >= 2; k--) {
-            long kStart = System.currentTimeMillis();
+                for (int j = i + 1; j < pruned.length; j++) {
+                    int c = pruned[j];
+                    double pc = b.probByItem[c];
+                    if (pc <= 0) continue;
 
-            // Filter transactions by length
-            List<List<Unit>> validTransactions = new ArrayList<>();
-            for (List<Unit> tx : prunedTransactions) {
-                if (tx.size() >= k) {
-                    validTransactions.add(tx);
-                } else {
+                    long pk = pairKey(a, c);
+                    pairES.merge(pk, b.count * pa * pc, Double::sum);
+                }
+            }
+        }
+
+        Set<Long> frequentPairs = new HashSet<>();
+        for (Map.Entry<Long, Double> e : pairES.entrySet()) {
+            if (e.getValue() + eps >= minEsup) frequentPairs.add(e.getKey());
+        }
+
+        // 6) Initialize candidates Ck from pruned bucket itemsets (sources computed EXACT by intersection)
+        Map<Integer, Map<ItemsetKey, Candidate>> C = new HashMap<>();
+        int maxSize = 0;
+
+        for (Bucket b : buckets) {
+            int[] pruned = prunedItemsPerBucket[b.id];
+            if (pruned.length == 0) continue;
+
+            BitSet src = computeSources(pruned, bucketsContainingItem);
+            if (src.isEmpty()) continue;
+
+            maxSize = Math.max(maxSize, pruned.length);
+            addOrMergeCandidate(C, new Candidate(pruned, 0, src));
+        }
+
+        // 7) Top-down HashMax loop (k from maxSize down to 3)
+        List<BitSet> maximalBits = new ArrayList<>();
+        List<Found> found = new ArrayList<>();
+
+        for (int k = maxSize; k >= 3; k--) {
+            Map<ItemsetKey, Candidate> Ck = C.get(k);
+            if (Ck == null || Ck.isEmpty()) continue;
+
+            List<Candidate> snapshot = new ArrayList<>(Ck.values());
+
+            for (Candidate t : snapshot) {
+                double es = expectedSupport(t, buckets);
+                if (es + eps >= minEsup) {
+                    BitSet bits = bitsetOf(t.items);
+                    maximalBits.add(bits);
+                    found.add(new Found(t.items, es));
+                    continue;
+                }
+
+                // Not frequent -> generate subsets size k-1
+                int n = t.items.length;
+                for (int removeIdx = 0; removeIdx < n; removeIdx++) {
+                    int[] subItems = removeAt(t.items, removeIdx);
+                    if (subItems.length <= 2) continue;
+
+                    Candidate sub = new Candidate(subItems, removeIdx, new BitSet());
+
+                    // Clean using frequent pairs
+                    clean(sub, frequentPairs);
+                    if (sub.items.length <= 2) continue;
+
+                    // Recompute sources EXACT after Clean
+                    sub.sources = computeSources(sub.items, bucketsContainingItem);
+                    if (sub.sources.isEmpty()) continue;
+
+                    // Maximality prune
+                    BitSet subBits = bitsetOf(sub.items);
+                    if (isSubsetOfAny(subBits, maximalBits)) continue;
+
+                    addOrMergeCandidate(C, sub);
+                }
+            }
+
+            C.remove(k); // free memory
+        }
+
+        // 8) Add maximal size-2
+        List<Found> pairs = new ArrayList<>();
+        for (long pk : frequentPairs) {
+            int a = hi(pk), b = lo(pk);
+            BitSet bits = new BitSet();
+            bits.set(a); bits.set(b);
+            if (!isSubsetOfAny(bits, maximalBits)) {
+                double es = pairES.getOrDefault(pk, 0.0);
+                pairs.add(new Found(new int[]{Math.min(a, b), Math.max(a, b)}, es));
+            }
+        }
+
+        // 9) Add maximal singletons
+        List<BitSet> higher = new ArrayList<>(maximalBits);
+        for (Found p : pairs) higher.add(bitsetOf(p.items));
+
+        List<Found> singles = new ArrayList<>();
+        for (int i = 0; i < nItems; i++) {
+            if (!inF1[i]) continue;
+            BitSet bits = new BitSet();
+            bits.set(i);
+            if (!isSubsetOfAny(bits, higher)) singles.add(new Found(new int[]{i}, f1ES[i]));
+        }
+
+        List<Found> all = new ArrayList<>();
+        all.addAll(found);
+        all.addAll(pairs);
+        all.addAll(singles);
+
+        if (all.isEmpty()) return List.of();
+
+        // 10) Dedup
+        Map<ItemsetKey, Found> dedup = new HashMap<>();
+        for (Found f : all) {
+            ItemsetKey key = new ItemsetKey(f.items);
+            Found prev = dedup.get(key);
+            if (prev == null || f.es > prev.es) dedup.put(key, f);
+        }
+
+        // 11) Post-filter maximal to guarantee maximal correctness
+        List<Found> dedupList = new ArrayList<>(dedup.values());
+        dedupList.sort((x, y) -> Integer.compare(y.items.length, x.items.length));
+
+        List<BitSet> keptBits = new ArrayList<>();
+        List<Found> kept = new ArrayList<>();
+        for (Found f : dedupList) {
+            BitSet bs = bitsetOf(f.items);
+            if (isSubsetOfAny(bs, keptBits)) continue;
+            keptBits.add(bs);
+            kept.add(f);
+        }
+
+        // 12) Convert to MItemset (Set<String>, exSup)
+        List<MItemset> out = new ArrayList<>(kept.size());
+        for (Found f : kept) {
+            LinkedHashSet<String> ids = new LinkedHashSet<>();
+            for (int idx : f.items) ids.add(idxToItem.get(idx));
+            out.add(new MItemset(ids, f.es));
+        }
+
+        // Stable sorting: longer first
+        out.sort((a, b) -> Integer.compare(b.getItems().size(), a.getItems().size()));
+        return out;
+    }
+
+    /*  Core computations  */
+    private static double expectedSupport(Candidate c, List<Bucket> buckets) {
+        double sum = 0.0;
+        for (int bid = c.sources.nextSetBit(0); bid >= 0; bid = c.sources.nextSetBit(bid + 1)) {
+            Bucket b = buckets.get(bid);
+            double prod = 1.0;
+
+            for (int item : c.items) {
+                double p = b.probByItem[item];
+                if (p <= 0.0) { prod = 0.0; break; }
+                prod *= p;
+            }
+            if (prod != 0.0) sum += b.count * prod;
+        }
+        return sum;
+    }
+
+    /** sources(X) = intersection of bucketsContainingItem[item] (choose pivot with smallest cardinality). */
+    private static BitSet computeSources(int[] items, BitSet[] bucketsContainingItem) {
+        if (items.length == 0) return new BitSet();
+
+        int pivot = items[0];
+        int minCard = bucketsContainingItem[pivot].cardinality();
+        for (int i = 1; i < items.length; i++) {
+            int it = items[i];
+            int card = bucketsContainingItem[it].cardinality();
+            if (card < minCard) {
+                minCard = card;
+                pivot = it;
+                if (minCard == 0) break;
+            }
+        }
+        if (minCard == 0) return new BitSet();
+
+        BitSet s = (BitSet) bucketsContainingItem[pivot].clone();
+        for (int it : items) {
+            if (it == pivot) continue;
+            s.and(bucketsContainingItem[it]);
+            if (s.isEmpty()) break;
+        }
+        return s;
+    }
+
+    /**
+     * Clean: keep mandatory prefix; remove optional item x if (m,x) is NOT frequent for any mandatory m.
+     */
+    private static void clean(Candidate t, Set<Long> frequentPairs) {
+        int n = t.items.length;
+        int mand = Math.min(t.mandatorySize, n);
+        if (mand <= 0 || n <= 2) return;
+
+        boolean[] keep = new boolean[n];
+        Arrays.fill(keep, true);
+
+        for (int idx = mand; idx < n; idx++) {
+            int x = t.items[idx];
+            for (int mi = 0; mi < mand; mi++) {
+                int m = t.items[mi];
+                long pk = pairKey(m, x);
+                if (!frequentPairs.contains(pk)) {
+                    keep[idx] = false;
                     break;
                 }
             }
-
-            if (validTransactions.isEmpty()) {
-                continue;
-            }
-
-            System.out.println("Processing k=" + k + ", valid transactions: " + validTransactions.size());
-
-            // Khởi tạo buckets với HashMap thông thường
-            List<Map<Set<Item>, Double>> buckets = new ArrayList<>(numBuckets);
-            for (int i = 0; i < numBuckets; i++) {
-                buckets.add(new HashMap<>());
-            }
-
-            // 3.1. Đếm expected support - với giới hạn combinations
-            int processedTx = 0;
-            for (List<Unit> txUnits : validTransactions) {
-                if (txUnits.size() < k) continue;
-
-                // OPTIMIZATION: Skip transaction có quá nhiều combinations
-                long possibleCombs = binomialCoefficient(txUnits.size(), k);
-                if (possibleCombs > MAX_COMBINATIONS_PER_TX) {
-                    continue; // Skip transaction này để tránh treo
-                }
-
-                List<List<Unit>> unitCombinations = new ArrayList<>();
-                generateUnitCombinations(txUnits, k, 0, new ArrayList<>(), unitCombinations);
-
-                for (List<Unit> comb : unitCombinations) {
-                    double prob = 1.0;
-                    Set<Item> items = new HashSet<>();
-                    for (Unit u : comb) {
-                        prob *= u.getProbability();
-                        items.add(u.getItem());
-                    }
-
-                    if (prob < 0.00001) continue;
-
-                    int h = Math.abs(items.hashCode()) % numBuckets;
-                    Map<Set<Item>, Double> bucket = buckets.get(h);
-                    bucket.put(items, bucket.getOrDefault(items, 0.0) + prob);
-                }
-
-                processedTx++;
-                if (processedTx % 1000 == 0) {
-                    System.out.println("  Processed " + processedTx + "/" + validTransactions.size() + " transactions");
-                }
-            }
-
-            // 3.2. Lọc frequent & kiểm tra maximal
-            int candidateCount = 0;
-            for (Map<Set<Item>, Double> bucket : buckets) {
-                if (bucket.isEmpty()) continue;
-
-                for (Map.Entry<Set<Item>, Double> e : bucket.entrySet()) {
-                    Set<Item> items = e.getKey();
-                    double esup = e.getValue();
-
-                    if (esup < minEsupThreshold) continue;
-
-                    candidateCount++;
-
-                    if (isSubsetOfExistingMaximalFast(items, maximalItemsets)) {
-                        continue;
-                    }
-
-                    Itemset candidate = new Itemset(items);
-                    candidate.setExpectedSupport(esup);
-                    maximalItemsets.add(candidate);
-                }
-            }
-
-            // Periodic cleanup
-            if (k % 3 == 0 && maximalItemsets.size() > 100) {
-                removeNonMaximal(maximalItemsets);
-            }
-
-            buckets.clear();
-            long kEnd = System.currentTimeMillis();
-            System.out.println("k=" + k + " done in " + (kEnd - kStart) + "ms, candidates: " + candidateCount + ", maximal: " + maximalItemsets.size());
         }
 
-        // Final cleanup
-        removeNonMaximal(maximalItemsets);
-
-        if (maximalItemsets.isEmpty()) {
-            for (Map.Entry<Item, Double> e : frequentItems.entrySet()) {
-                Set<Item> s = new HashSet<>();
-                s.add(e.getKey());
-                Itemset is = new Itemset(s);
-                is.setExpectedSupport(e.getValue());
-                maximalItemsets.add(is);
-            }
-        }
-
-        long endTime = System.currentTimeMillis();
-        System.out.println("Total time: " + (endTime - startTime) + "ms");
-        System.out.println("Final maximal itemsets: " + maximalItemsets.size());
-
-        return maximalItemsets;
-    }
-
-    // ====== HELPER METHODS ======
-
-    /**
-     *
-     *Tính expected support của từng item đơn lẻ
-     */
-    private Map<Item, Double> buildF1(List<Transaction> transactions) {
-        Map<Item, Double> esup = new HashMap<>();
-        //Tạo hashmap để lưu expected support của từng item
-        for (Transaction t : transactions) {
-            for (Unit u : t.getUnits()) {
-                esup.merge(u.getItem(), u.getProbability(), Double::sum);
-                //Lấy các item trong các unit và tính tổng các Prob
-            }
-        }
-        return esup;
+        t.items = compactByMask(t.items, keep);
+        if (t.mandatorySize > t.items.length) t.mandatorySize = t.items.length;
     }
 
     /**
-     *
-     * Hàm tính số cách chọn k phần tử từ n phần tử C(n,k)
+     Prune theo maximality(Check theo BitSet Candidate AND NOT M rá»—ng -> subset
      */
-    private long binomialCoefficient(int n, int k) {
-        if (k > n - k) k = n - k;
-        long result = 1;
-        for (int i = 0; i < k; i++) {
-            result *= (n - i);
-            result /= (i + 1);
-            if (result > MAX_COMBINATIONS_PER_TX) return result;
-        }
-        return result;
-    }
-
-    /**
-     *
-     * Hàm này tạo index cố định để thực hiện hàm toBitSet
-     */
-    private void buildItemIndex(Map<Item, Double> frequentItems) {
-        itemToIndex = new HashMap<>();
-        int idx = 0;
-        for (Item item : frequentItems.keySet()) {
-            itemToIndex.put(item, idx++);
-        }
-    }
-
-    /**
-     *
-     * Hàm  chuyển một tập các Item (tập mục) thành một BitSet
-     */
-    private BitSet toBitSet(Set<Item> items) {
-        BitSet bits = new BitSet();
-        //Tạo 1 BitSet mới, ban đầu các bit đều false
-        for (Item item : items) {
-            Integer idx = itemToIndex.get(item);
-            // Lấy chỉ số index tương ứng với item từ Map<Item, Integer> ItemtoIndex
-            if (idx != null) {
-                bits.set(idx);
-
-            }
-        }
-        return bits;
-        //Trả về BitSet đã được thiết lập các bit tương ứng với các Item trong tập items.
-    }
-
-    /**
-     * Loại bỏ item không phổ biến khỏi từng transaction
-     * Loại bỏ luôn Transaction rỗng
-     * Trả về danh sách các Transaction đã làm sạch,chỉ chứa các item frequent
-     */
-
-    private List<List<Unit>> pruneTransactions(List<Transaction> transactions, Set<Item> frequentItems) {
-        List<List<Unit>> pruned = new ArrayList<>();
-        //Tạo list để lưu các giao dịch được cắt tỉa
-        for (Transaction t : transactions) {
-            List<Unit> filtered = new ArrayList<>();
-            for (Unit u : t.getUnits()) {
-                if (frequentItems.contains(u.getItem())) {
-                    filtered.add(u);
-                    //Nếu u.getItem() là item trong frequentItems thì lưu vào filtered, không thì loại bỏ
-                }
-            }
-            filtered.sort(Comparator.comparing(u -> u.getItem().getId()));
-            // sắp xếp theo
-            if (!filtered.isEmpty()) {
-                pruned.add(filtered);
-                //Nếu sau khi cắt tỉa, filtered vẫn còn ít nhất một Unit → thêm filtered vào pruned.
-                // filtered rỗng (hết giao dịch frequent) -> bỏ qua giao dịch đó
-            }
-        }
-        return pruned;
-        // trả về danh sách các giao dịch frequent
-    }
-
-    /**
-     *
-     * Tạo ra tất cả các tổ hợp con gồm k phần tử từ unit
-     * Dùng đệ quy
-     */
-    private void generateUnitCombinations(List<Unit> units, int k, int start,
-                                          List<Unit> current, List<List<Unit>> output) {
-        if (current.size() == k) {
-            output.add(new ArrayList<>(current));
-            return;
-        }
-        for (int i = start; i <= units.size() - (k - current.size()); i++) {
-            //Điều kiện : units.size() - (k - current.size()) là vị trí cuối cùng mà nếu chọn units.get(i)thì vẫn đủ phần tử phía sau để chọn đủ k phần tử
-            //Nếu i lớn hơn thì phía sau không còn đủ phần tử để chọn -> không thể tạo tổ hợp k phần tử -> không cần xét
-            current.add(units.get(i));
-            //Gọi đệ quy tổ hợp tiếp theo
-            generateUnitCombinations(units, k, i + 1, current, output);
-
-            current.remove(current.size() - 1);
-            //remove có 2 tác dụng
-            //Trong đệ quy thì remove phần tử thêm vào
-            //Ngoài đệ quy thì remove phần tử gốc
-        }
-    }
-
-    /**
-     *
-     * Hàm isSubsetOfExistingMaximalFast check xem canItems có phải là tập con (subset) của 1 maximal itemset nào đã có sẵn trong maximalItemsets không,nếu có thì loại canItems luôn .
-     */
-    private boolean isSubsetOfExistingMaximalFast(Set<Item> candItems, List<Itemset> maximalItemsets) {
-        BitSet candBits = toBitSet(candItems);
-        for (Itemset m : maximalItemsets) {
-            if (m.getItems().size() < candItems.size()) continue;
-
-            BitSet maxBits = toBitSet(m.getItems());
-            BitSet temp = (BitSet) candBits.clone();
-            temp.and(maxBits);
-            //BitSet chứa các bit có trong cả canItems và m.getItems()
-
-            if (temp.equals(candBits)) {
-                return true;
-            }
+    private static boolean isSubsetOfAny(BitSet candidate, List<BitSet> maximals) {
+        for (BitSet m : maximals) {
+            BitSet tmp = (BitSet) candidate.clone();
+            tmp.andNot(m);
+            if (tmp.isEmpty()) return true;
         }
         return false;
     }
 
+    /**
+     Loáº¡i item khÃ´ng frequent khá»i 1 transaction
+     */
+
+    private static int[] filterByF1(int[] items, boolean[] inF1) {
+        int[] tmp = new int[items.length];
+        int k = 0;
+        for (int x : items) if (inF1[x]) tmp[k++] = x;
+        return Arrays.copyOf(tmp, k);
+    }
+
+    /**
+     Sinh subset cá»§a X vá»›i kÃ­ch thÆ°á»›c X-1 khi X khÃ´ng frequent
+     */
+    private static int[] removeAt(int[] items, int removeIdx) {
+        int[] out = new int[items.length - 1];
+        int k = 0;
+        for (int i = 0; i < items.length; i++) if (i != removeIdx) out[k++] = items[i];
+        return out;
+    }
+
+    /**
+     Sau khi clean, Táº¡o ra máº£ng itemset chá»‰ giá»¯ nhá»¯ng item cÃ²n giá»¯
+     */
+    private static int[] compactByMask(int[] items, boolean[] keep) {
+        int[] tmp = new int[items.length];
+        int k = 0;
+        for (int i = 0; i < items.length; i++) if (keep[i]) tmp[k++] = items[i];
+        return Arrays.copyOf(tmp, k);
+    }
+
+    /**
+     Chuyá»ƒn itemset dáº¡ng int[] sang BitSet Ä‘á»ƒ check nhanh hÆ¡n
+     */
+    private static BitSet bitsetOf(int[] items) {
+        BitSet bs = new BitSet();
+        for (int x : items) bs.set(x);
+        return bs;
+    }
+
+    /**
+     Há»£p nháº¥t cÃ¡c itemset giá»‘ng cÃ¡c item cho ra cÃ¹ng 1 key
+     */
+    private static long pairKey(int a, int b) {
+        int x = Math.min(a, b), y = Math.max(a, b);
+        return (((long) x) << 32) | (y & 0xffffffffL);
+    }
+
+    /**
+     TÃ¡ch ngÆ°á»£c láº¡i 2 sá»‘ int tá»« key long
+     */
+    private static int hi(long k) { return (int) (k >>> 32); }
+    private static int lo(long k) { return (int) (k & 0xffffffffL); }
 
     /**
      *
-     * Hàm removeNonMaximal để lọc các itemset không là maximal từ list maximalItemsets,để đảm bảo list output chỉ còn các maximalItemsets thật sự
+     * @param C
+     * @param c
      */
-    private void removeNonMaximal(List<Itemset> maximalItemsets) {
-        Set<Itemset> toRemove = new HashSet<>();
-        for (int i = 0; i < maximalItemsets.size(); i++) {
-            Itemset current = maximalItemsets.get(i);
-            for (int j = 0; j < maximalItemsets.size(); j++) {
-                if (i != j) {
-                    Itemset other = maximalItemsets.get(j);
-                    if (other.getItems().size() > current.getItems().size() &&
-                            other.getItems().containsAll(current.getItems())) {
-                        toRemove.add(current);
-                        break;
-                    }
-                }
+    private static void addOrMergeCandidate(Map<Integer, Map<ItemsetKey, Candidate>> C, Candidate c) {
+        int size = c.items.length;
+        if (size <= 0) return;
+
+        Map<ItemsetKey, Candidate> bucket = C.computeIfAbsent(size, k -> new HashMap<>());
+        ItemsetKey key = new ItemsetKey(c.items);
+
+        Candidate prev = bucket.get(key);
+        if (prev == null) bucket.put(key, c);
+        else {
+            prev.sources.or(c.sources);
+            prev.mandatorySize = Math.max(prev.mandatorySize, c.mandatorySize);
+        }
+    }
+
+    /**
+     Ã‰p xÃ¡c suáº¥t vá» kiá»ƒu [0,1] trÃ¡nh null/NaN
+     */
+    private static double clamp01(Double p) {
+        if (p == null || Double.isNaN(p)) return 0.0;
+        if (p < 0.0) return 0.0;
+        if (p > 1.0) return 1.0;
+        return p;
+    }
+
+    /** In-place sort idxs ascending and permute probs accordingly (simple quicksort). */
+    private static void sortByIdx(int[] idxs, double[] probs) {
+        quickSort(idxs, probs, 0, idxs.length - 1);
+    }
+
+    /**
+     HÃ m thá»§ cÃ´ng Ä‘á»ƒ sort song song 2 máº£ng idxs vÃ  probs
+     */
+    private static void quickSort(int[] a, double[] b, int lo, int hi) {
+        int i = lo, j = hi;
+        int pivot = a[lo + (hi - lo) / 2];
+
+        while (i <= j) {
+            while (a[i] < pivot) i++;
+            while (a[j] > pivot) j--;
+
+            if (i <= j) {
+                swap(a, b, i, j);
+                i++; j--;
             }
         }
-        maximalItemsets.removeAll(toRemove);
+        if (lo < j) quickSort(a, b, lo, j);
+        if (i < hi) quickSort(a, b, i, hi);
+    }
+
+    /**
+     HÃ m thá»§ cÃ´ng Ä‘á»ƒ sort song song 2 máº£ng idxs vÃ  probs
+     */
+    private static void swap(int[] a, double[] b, int i, int j) {
+        int ti = a[i]; a[i] = a[j]; a[j] = ti;
+        double td = b[i]; b[i] = b[j]; b[j] = td;
     }
 }

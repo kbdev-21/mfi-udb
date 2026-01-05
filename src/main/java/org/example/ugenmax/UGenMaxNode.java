@@ -7,6 +7,7 @@ import java.util.Set;
 
 public class UGenMaxNode {
     private Set<String> itemset;
+    /* The HashMap that store the transaction ID as key and probability of this itemset in that transaction as value */
     private Map<String, Double> tidProb;
 
     public UGenMaxNode() {
@@ -17,10 +18,6 @@ public class UGenMaxNode {
     public UGenMaxNode(Set<String> itemset, Map<String, Double> tidProb) {
         this.itemset = itemset;
         this.tidProb = tidProb;
-    }
-
-    public int getLevel() {
-        return itemset.size();
     }
 
     public Double getEsup() {
