@@ -8,8 +8,8 @@ import java.util.*;
 public class DatasetGenerator {
     public static void main(String[] args) {
         //List<MTransaction> newDataset = DatasetGenerator.generateRandomDataset(20, 10000);
-        List<MTransaction> newDataset = DatasetGenerator.translateFromSpmf("datasets/spmf/BMS1_itemset_mining.txt");
-        String filename = "dataset-BMS1_itemset_mining.txt";
+        List<MTransaction> newDataset = DatasetGenerator.translateFromSpmf("datasets/spmf/mushrooms.txt", 0.5);
+        String filename = "dataset-mushrooms.txt";
         DatasetGenerator.writeToFile(newDataset, "datasets/" + filename);
     }
 
@@ -128,7 +128,8 @@ public class DatasetGenerator {
     }
 
     public static List<MTransaction> translateFromSpmf(
-        String spmfFilePath
+        String spmfFilePath,
+        double minProb
     ) {
         List<MTransaction> dataset = new ArrayList<>();
         Random random = new Random();
@@ -147,7 +148,7 @@ public class DatasetGenerator {
                 for (String token : tokens) {
                     // GIỮ NGUYÊN item ID
 
-                    double prob = 0.8 + random.nextDouble() * 0.2;
+                    double prob = minProb + random.nextDouble() * (1.0 - minProb);
                     prob = Math.round(prob * 100.0) / 100.0;
 
                     units.put(token, prob);

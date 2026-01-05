@@ -164,6 +164,8 @@ public final class UHashMax {
         List<Found> found = new ArrayList<>();
 
         for (int k = maxSize; k >= 3; k--) {
+            System.out.println("Current k: " + k);
+
             Map<ItemsetKey, Candidate> Ck = C.get(k);
             if (Ck == null || Ck.isEmpty()) continue;
 
