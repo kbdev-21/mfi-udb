@@ -3,6 +3,9 @@ package org.example.uhashmax;
 
 import java.util.Arrays;
 
+/**
+ * Khóa băm chuẩn hóa itemset int[] để đưa vào hashmap
+ */
 final class ItemsetKey {
     final int[] items;
     final int hash;

@@ -13,8 +13,8 @@ import java.util.*;
 public class UGenMaxRunner {
     public static void main(String[] args) {
         /* Customizable parameters */
-        String datasetFilename = "dataset-mushrooms.txt";
-        double minEsupRate = 0.08;
+        String datasetFilename = "dataset-BMS1.txt";
+        double minEsupRate = 0.002;
 
         /* Start algorithm */
         Instant start = Instant.now();

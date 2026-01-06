@@ -2,7 +2,7 @@ package org.example.uhashmax;
 
 import java.util.Arrays;
 
-/** Key for bucketing identical uncertain transactions: (sorted idxs + prob bits aligned). */
+/** Làm key cho transaction để bucket hóa (vì để xét 2 bucket giống nhau thì giống về cả items và probs */
 final class TxKey {
     final int[] idxs;
     final long[] probBits;

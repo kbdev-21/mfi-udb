@@ -1,0 +1,2 @@
+Total itemsets found: 0
+Elapsed time: 582ms

@@ -1,6 +1,6 @@
 package org.example.uhashmax;
 
-/* ====================== Internal structures ====================== */
+/* Đại diện thay cho Transaction và đếm Transaction có cùng tập item giống hệt nhau */
 final class Bucket {
     final int id;
     int count = 1;

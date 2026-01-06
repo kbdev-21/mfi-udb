@@ -2,7 +2,9 @@ package org.example.uhashmax;
 
 import java.util.BitSet;
 
-
+/**
+ * Thay cho Itemset đang được xét trong top-down
+ */
 final class Candidate {
     int[] items;          // sorted
     int mandatorySize;    // prefix length

@@ -25,7 +25,7 @@ public final class UHashMax {
 
     private UHashMax() {}
 
-    /** Main API: identical to GenMax threshold style (absolute minEsup). */
+    /** Main API */
     public static List<MItemset> mfi(List<MTransaction> dataset, double minEsup) {
         return mfi(dataset, minEsup, 1e-9);
     }
@@ -152,6 +152,8 @@ public final class UHashMax {
             int[] pruned = prunedItemsPerBucket[b.id];
             if (pruned.length == 0) continue;
 
+            if (upperBoundBySingletons(pruned, f1ES) + eps < minEsup) continue;
+
             BitSet src = computeSources(pruned, bucketsContainingItem);
             if (src.isEmpty()) continue;
 
@@ -164,8 +166,6 @@ public final class UHashMax {
         List<Found> found = new ArrayList<>();
 
         for (int k = maxSize; k >= 3; k--) {
-            System.out.println("Current k: " + k);
-
             Map<ItemsetKey, Candidate> Ck = C.get(k);
             if (Ck == null || Ck.isEmpty()) continue;
 
@@ -191,6 +191,8 @@ public final class UHashMax {
                     // Clean using frequent pairs
                     clean(sub, frequentPairs);
                     if (sub.items.length <= 2) continue;
+
+                    if (upperBoundBySingletons(sub.items, f1ES) + eps < minEsup) continue;
 
                     // Recompute sources EXACT after Clean
                     sub.sources = computeSources(sub.items, bucketsContainingItem);
@@ -289,7 +291,7 @@ public final class UHashMax {
         return sum;
     }
 
-    /** sources(X) = intersection of bucketsContainingItem[item] (choose pivot with smallest cardinality). */
+    /** sources(X) = tập các bucket (transaction đã bucket hóa) mà chứa đầy đủ itemset X. */
     private static BitSet computeSources(int[] items, BitSet[] bucketsContainingItem) {
         if (items.length == 0) return new BitSet();
 
@@ -297,7 +299,7 @@ public final class UHashMax {
         int minCard = bucketsContainingItem[pivot].cardinality();
         for (int i = 1; i < items.length; i++) {
             int it = items[i];
-            int card = bucketsContainingItem[it].cardinality();
+                int card = bucketsContainingItem[it].cardinality();
             if (card < minCard) {
                 minCard = card;
                 pivot = it;
@@ -343,7 +345,7 @@ public final class UHashMax {
     }
 
     /**
-     Prune theo maximality(Check theo BitSet Candidate AND NOT M rá»—ng -> subset
+     Prune theo maximality(Check theo BitSet Candidate AND NOT M rỗng -> subset
      */
     private static boolean isSubsetOfAny(BitSet candidate, List<BitSet> maximals) {
         for (BitSet m : maximals) {
@@ -355,7 +357,7 @@ public final class UHashMax {
     }
 
     /**
-     Loáº¡i item khÃ´ng frequent khá»i 1 transaction
+     Loại item không frequent khỏi 1 transaction
      */
 
     private static int[] filterByF1(int[] items, boolean[] inF1) {
@@ -366,7 +368,7 @@ public final class UHashMax {
     }
 
     /**
-     Sinh subset cá»§a X vá»›i kÃ­ch thÆ°á»›c X-1 khi X khÃ´ng frequent
+     Sinh subset của X với kích thước X-1 khi X không frequent
      */
     private static int[] removeAt(int[] items, int removeIdx) {
         int[] out = new int[items.length - 1];
@@ -376,7 +378,7 @@ public final class UHashMax {
     }
 
     /**
-     Sau khi clean, Táº¡o ra máº£ng itemset chá»‰ giá»¯ nhá»¯ng item cÃ²n giá»¯
+     Sau khi clean, Tạo ra mảng itemset chỉ giữ những item còn giữ
      */
     private static int[] compactByMask(int[] items, boolean[] keep) {
         int[] tmp = new int[items.length];
@@ -386,7 +388,7 @@ public final class UHashMax {
     }
 
     /**
-     Chuyá»ƒn itemset dáº¡ng int[] sang BitSet Ä‘á»ƒ check nhanh hÆ¡n
+     Chuyển itemset dạng int[] sang BitSet để check nhanh hơn
      */
     private static BitSet bitsetOf(int[] items) {
         BitSet bs = new BitSet();
@@ -395,7 +397,7 @@ public final class UHashMax {
     }
 
     /**
-     Há»£p nháº¥t cÃ¡c itemset giá»‘ng cÃ¡c item cho ra cÃ¹ng 1 key
+     Hợp nhất các itemset giống các item cho ra cùng 1 key
      */
     private static long pairKey(int a, int b) {
         int x = Math.min(a, b), y = Math.max(a, b);
@@ -403,7 +405,7 @@ public final class UHashMax {
     }
 
     /**
-     TÃ¡ch ngÆ°á»£c láº¡i 2 sá»‘ int tá»« key long
+     Tách ngược lại 2 số int từ key long
      */
     private static int hi(long k) { return (int) (k >>> 32); }
     private static int lo(long k) { return (int) (k & 0xffffffffL); }
@@ -429,7 +431,7 @@ public final class UHashMax {
     }
 
     /**
-     Ã‰p xÃ¡c suáº¥t vá» kiá»ƒu [0,1] trÃ¡nh null/NaN
+     Ép xác suất về kiểu [0,1] tránh null/NaN
      */
     private static double clamp01(Double p) {
         if (p == null || Double.isNaN(p)) return 0.0;
@@ -444,7 +446,7 @@ public final class UHashMax {
     }
 
     /**
-     HÃ m thá»§ cÃ´ng Ä‘á»ƒ sort song song 2 máº£ng idxs vÃ  probs
+     Hàm thủ công để sort song song 2 mảng idxs và probs
      */
     private static void quickSort(int[] a, double[] b, int lo, int hi) {
         int i = lo, j = hi;
@@ -464,10 +466,19 @@ public final class UHashMax {
     }
 
     /**
-     HÃ m thá»§ cÃ´ng Ä‘á»ƒ sort song song 2 máº£ng idxs vÃ  probs
+     Hàm thủ công để sort song song 2 mảng idxs và probs
      */
     private static void swap(int[] a, double[] b, int i, int j) {
         int ti = a[i]; a[i] = a[j]; a[j] = ti;
         double td = b[i]; b[i] = b[j]; b[j] = td;
+    }
+
+    private static double upperBoundBySingletons(int[] items, double[] f1ES) {
+        double ub = Double.POSITIVE_INFINITY;
+        for (int it : items) {
+            double v = f1ES[it];
+            if (v < ub) ub = v;
+        }
+        return ub;
     }
 }
